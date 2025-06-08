@@ -33,8 +33,11 @@ Contact.init(
       allowNull: true,
     },
     linkPrecedence: {
-      type: DataTypes.ENUM('primary', 'secondary'),
+      type: DataTypes.STRING,
       allowNull: false,
+      validate: {
+        isIn: [['primary', 'secondary']],
+      },
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -54,7 +57,7 @@ Contact.init(
   {
     sequelize: sequelizeConnection,
     tableName: 'contacts',
-    timestamps: true
+    timestamps: true,
   },
 );
 
