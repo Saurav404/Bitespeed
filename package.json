@@ -5,7 +5,9 @@
   "author": "TypeScript + Sequelize + PostgreSQL + Express API Server",
   "license": "MIT",
   "scripts": {
-    "dev": "nodemon --watch src --exec ts-node src/server.ts"
+    "dev": "nodemon --watch src --exec ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@types/node": "^20.8.4",
