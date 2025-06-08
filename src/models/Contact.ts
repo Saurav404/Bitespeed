@@ -58,6 +58,7 @@ Contact.init(
     sequelize: sequelizeConnection,
     tableName: 'contacts',
     timestamps: true,
+    underscored: true,
   },
 );
 

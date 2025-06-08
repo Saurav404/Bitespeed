@@ -2,15 +2,20 @@ import { Op } from 'sequelize';
 import Contact from '../models/Contact';
 
 export const handleIdentify = async (email: string, phoneNumber: string) => {
+  // OR condition in case of any one of them is null
+  const orConditions = [];
+  if (email) orConditions.push({ email });
+  if (phoneNumber) orConditions.push({ phoneNumber });
+
   const contacts = await Contact.findAll({
     where: {
-      [Op.or]: [{ email }, { phoneNumber }],
+      [Op.or]: orConditions,
     },
     order: [['createdAt', 'ASC']],
   });
 
   if (contacts.length === 0) {
-    // create new primary contact
+    // Create new primary contact
     const newContact = await Contact.create({
       email,
       phoneNumber,
@@ -28,46 +33,65 @@ export const handleIdentify = async (email: string, phoneNumber: string) => {
     };
   }
 
-  // finding the first "primary" contact
-  const primaries = contacts.filter(c => c.linkPrecedence === 'primary');
-  const [primaryContact, ...otherPrimaries] = primaries.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Get all contacts for the incoming email/phoneNumber + their primary contacts
+  const contactIds = new Set();
 
-  // if more than one primary then convert the other primary to secondary
-  const secondaryUpdates = [];
+  contacts.forEach(contact => {
+    contactIds.add(contact?.id);
+    if (contact.linkedId) {
+      contactIds.add(contact?.linkedId);
+    }
+  });
 
-  for (const other of otherPrimaries) {
-    secondaryUpdates.push(
-      Contact.update(
-        {
+  const linkedPrimaryContacts = await Contact.findAll({
+    where: {
+      id: {
+        [Op.in]: [...contactIds],
+      },
+    },
+  });
+
+  // Finding the first "primary" contact
+  const primaries = linkedPrimaryContacts.filter(c => c.linkPrecedence === 'primary');
+  const [primaryContact, otherPrimary] = primaries.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  // Add the contact if combination of both phone number and email is new
+  if (email && phoneNumber) {
+    //If there is only one primary contact, add the incoming contact as new secondary contact
+    if (!otherPrimary) {
+      const contactExist = await Contact.findOne({
+        where: { email, phoneNumber },
+      });
+
+      if (!contactExist) {
+        await Contact.create({
+          email,
+          phoneNumber,
           linkPrecedence: 'secondary',
           linkedId: primaryContact.id,
-        },
-        { where: { id: other.id } }
-      ),
-      Contact.update(
+        });
+      }
+    } else {
+      // Convert the other primary contact to oldest primary contact's secondary.
+      // Get all the the secondary contacts for the other primary and link them to the primary contact
+      const secondaryContacts = await Contact.findAll({
+        where: { linkedId: otherPrimary.id, linkPrecedence: 'secondary' },
+      });
+
+      await Contact.update(
         {
           linkedId: primaryContact.id,
         },
-        { where: { linkedId: other.id } }
-      )
-    );
+        {
+          where: { id: { [Op.in]: secondaryContacts.map(item => item.id) } },
+        },
+      );
+
+      //Link the other primary to the first primary contact
+      await Contact.update({ linkedId: primaryContact.id, linkPrecedence: 'secondary' }, { where: { id: otherPrimary.id } });
+    }
   }
 
-  await Promise.all(secondaryUpdates);
-
-  // create new secondary if new info (email/phone) not matched yet
-  const alreadyExists = contacts.find(c => c.email === email && c.phoneNumber === phoneNumber);
-
-  if (!alreadyExists) {
-    await Contact.create({
-      email,
-      phoneNumber,
-      linkedId: primaryContact.id,
-      linkPrecedence: 'secondary',
-    });
-  }
-
-  // get all related contacts (primary + secondaries)
   const allContacts = await Contact.findAll({
     where: {
       [Op.or]: [{ id: primaryContact.id }, { linkedId: primaryContact.id }],
@@ -90,8 +114,8 @@ export const handleIdentify = async (email: string, phoneNumber: string) => {
   return {
     contact: {
       primaryContactId: primaryContact.id,
-      emails: [primaryContact.email, ...[...emails].filter(e => e !== primaryContact.email)],
-      phoneNumbers: [primaryContact.phoneNumber, ...[...phoneNumbers].filter(p => p !== primaryContact.phoneNumber)],
+      emails: [...emails],
+      phoneNumbers: [...phoneNumbers],
       secondaryContactIds,
     },
   };
