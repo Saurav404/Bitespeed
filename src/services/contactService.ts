@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import Contact from '../models/Contact';
 
 export const handleIdentify = async (email: string, phoneNumber: string) => {
-  // OR condition in case of any one of them is null
+  // OR condition in case any one email/phoneNumber is null
   const orConditions = [];
   if (email) orConditions.push({ email });
   if (phoneNumber) orConditions.push({ phoneNumber });
@@ -55,9 +55,9 @@ export const handleIdentify = async (email: string, phoneNumber: string) => {
   const primaries = linkedPrimaryContacts.filter(c => c.linkPrecedence === 'primary');
   const [primaryContact, otherPrimary] = primaries.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Add the contact if combination of both phone number and email is new
+  // Add the contact to DB if combination of both phoneNumber and email is new.
   if (email && phoneNumber) {
-    //If there is only one primary contact, add the incoming contact as new secondary contact
+    //If there is only one primary contact, add the incoming contact as new secondary contact.
     if (!otherPrimary) {
       const contactExist = await Contact.findOne({
         where: { email, phoneNumber },
@@ -92,6 +92,8 @@ export const handleIdentify = async (email: string, phoneNumber: string) => {
     }
   }
 
+
+  // Get all contact and return the result object
   const allContacts = await Contact.findAll({
     where: {
       [Op.or]: [{ id: primaryContact.id }, { linkedId: primaryContact.id }],
